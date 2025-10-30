@@ -1,16 +1,17 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from sqlmodel import Session, select
 from models import Word
 from database import engine, init_db
 from config import cache
 import time
 
-app = FastAPI(title="Synonym Retrieval API (Read-Only with Per-Record Caching)")
+app = FastAPI(title="Synonym Retrieval API (Per-Record + Bulk Caching)")
 
 # === Initialization ===
 @app.on_event("startup")
 def on_startup():
     init_db()
+    print("✅ Database initialized")
 
 
 # === Latency Tracking Middleware ===
@@ -32,7 +33,6 @@ def get_all_words():
     """
     Retrieve all synonym records.
     Each record is cached individually and includes a metadata flag.
-    The system supports only full-table retrieval (no single record lookups).
     """
     with Session(engine) as session:
         words = session.exec(select(Word)).all()
@@ -53,5 +53,31 @@ def get_all_words():
         results.append(record)
 
     return results
+
+
+# === Get a Specific Word (Cached) ===
+@app.get("/words/{word_text}")
+def get_word(word_text: str):
+    """
+    Retrieve a specific word and its synonyms.
+    Uses cache for fast access with metadata flag.
+    """
+    cache_key = f"word:{word_text.lower()}"
+    cached_record = cache.get(cache_key)
+
+    if cached_record:
+        return {**cached_record, "cached": True}
+
+    with Session(engine) as session:
+        word = session.exec(select(Word).where(Word.word == word_text)).first()
+        if not word:
+            raise HTTPException(status_code=404, detail="Word not found")
+
+        record = {"id": word.id, "word": word.word, "synonyms": word.synonyms, "cached": False}
+        # Cache for future requests
+        cache.set(cache_key, {"id": word.id, "word": word.word, "synonyms": word.synonyms})
+
+        return record
+
 
 

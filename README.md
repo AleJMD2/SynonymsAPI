@@ -52,6 +52,15 @@ pip install -r requirements.txt
 # Running the API
 uvicorn main:app --reload
 
+Endpoint: GET /words/
+
+Retrieves all words from the database.
+Each record is cached individually and includes a cached flag to show whether it came from cache.
+
+Endpoint: GET /words/{word_text}
+
+Retrieves a single word and its synonyms.
+Uses cache first, with database fallback if not found.
 
 Visit:
 
